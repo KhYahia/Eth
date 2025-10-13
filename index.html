@@ -15,10 +15,10 @@
 
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
   <script>
-    // 🪪 Your deployed contract address
+   
     const contractAddress = "0x17414c219fe5077BCe2d6988b41c6669906aB9c3";
 
-    // 📜 ABI of your Counter.sol contract
+  
     const contractABI = [
       {
         "inputs": [],
@@ -53,7 +53,7 @@
     let signer;
     let contract;
 
-    // Connect MetaMask wallet
+   
     async function connectWallet() {
       if (window.ethereum) {
         provider = new ethers.providers.Web3Provider(window.ethereum);
@@ -68,13 +68,12 @@
       }
     }
 
-    // Read the current count
     async function getCount() {
       const value = await contract.get();
       document.getElementById("count").innerText = value.toString();
     }
 
-    // Increment the counter
+  
     async function increment() {
       const tx = await contract.increment();
       await tx.wait();
