@@ -1,1 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Counter DApp</title>
+</head>
+<body>
+  <h2>🧮 Simple Counter DApp</h2>
+  <p><b>Connected Account:</b> <span id="account">Not connected</span></p>
+  <p><b>Current Count:</b> <span id="count">0</span></p>
+
+  <button id="connectBtn">Connect MetaMask</button>
+  <button id="getBtn">Read Count</button>
+  <button id="incBtn">Increment</button>
+
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
+  <script>
+    // 🪪 Your deployed contract address
+    const contractAddress = "0x17414c219fe5077BCe2d6988b41c6669906aB9c3";
+
+    // 📜 ABI of your Counter.sol contract
+    const contractABI = [
+      {
+        "inputs": [],
+        "name": "decrement",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "increment",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "get",
+        "outputs": [
+          {
+            "internalType": "uint256",
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      }
+    ];
+
+    let provider;
+    let signer;
+    let contract;
+
+    // Connect MetaMask wallet
+    async function connectWallet() {
+      if (window.ethereum) {
+        provider = new ethers.providers.Web3Provider(window.ethereum);
+        await provider.send("eth_requestAccounts", []);
+        signer = provider.getSigner();
+        const account = await signer.getAddress();
+        document.getElementById("account").innerText = account;
+        contract = new ethers.Contract(contractAddress, contractABI, signer);
+        alert("Connected to MetaMask!");
+      } else {
+        alert("Please install MetaMask!");
+      }
+    }
+
+    // Read the current count
+    async function getCount() {
+      const value = await contract.get();
+      document.getElementById("count").innerText = value.toString();
+    }
+
+    // Increment the counter
+    async function increment() {
+      const tx = await contract.increment();
+      await tx.wait();
+      getCount();
+    }
+
+    // Button actions
+    document.getElementById("connectBtn").onclick = connectWallet;
+    document.getElementById("getBtn").onclick = getCount;
+    document.getElementById("incBtn").onclick = increment;
+  </script>
+</body>
+</html>
+
 
