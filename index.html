@@ -2,31 +2,72 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Counter DApp</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simple Counter DApp</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f9fafc;
+      color: #222;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+
+    h1 {
+      color: #1b5cff;
+    }
+
+    button {
+      background-color: #1b5cff;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      margin: 5px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    button:hover {
+      background-color: #0f3ecf;
+    }
+
+    #message {
+      margin-top: 15px;
+      color: green;
+      font-weight: bold;
+    }
+
+    .container {
+      text-align: center;
+      background: #fff;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+  </style>
 </head>
 <body>
-  <h2>🧮 Simple Counter DApp</h2>
-  <p><b>Connected Account:</b> <span id="account">Not connected</span></p>
-  <p><b>Current Count:</b> <span id="count">0</span></p>
+  <div class="container">
+    <h1>Simple Counter DApp</h1>
+    <p id="account">Connected Account: Not connected</p>
+    <p id="count">Current Count: 0</p>
 
-  <button id="connectBtn">Connect MetaMask</button>
-  <button id="getBtn">Read Count</button>
-  <button id="incBtn">Increment</button>
+    <button onclick="connectMetaMask()">Connect MetaMask</button>
+    <button onclick="readCount()">Read Count</button>
+    <button onclick="increment()">Increment</button>
 
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
+    <p id="message"></p>
+  </div>
+
   <script>
-   
-    const contractAddress = "0xe0404d14ebd64d3259b9724bca77f7dc9f058ec5";
-
-  
+    const contractAddress = "0x3ac658a8bcd517e65E85d663cE329F07476721f8";
     const contractABI = [
-      {
-        "inputs": [],
-        "name": "decrement",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-      },
       {
         "inputs": [],
         "name": "increment",
@@ -36,7 +77,20 @@
       },
       {
         "inputs": [],
-        "name": "get",
+        "name": "count",
+        "outputs": [
+          {
+            "internalType": "uint256",
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "getCount",
         "outputs": [
           {
             "internalType": "uint256",
@@ -49,41 +103,51 @@
       }
     ];
 
-    let provider;
-    let signer;
-    let contract;
+    let provider, signer, contract;
 
-   
-    async function connectWallet() {
+    async function connectMetaMask() {
       if (window.ethereum) {
-        provider = new ethers.providers.Web3Provider(window.ethereum);
-        await provider.send("eth_requestAccounts", []);
-        signer = provider.getSigner();
-        const account = await signer.getAddress();
-        document.getElementById("account").innerText = account;
-        contract = new ethers.Contract(contractAddress, contractABI, signer);
-        alert("Connected to MetaMask!");
+        try {
+          await ethereum.request({ method: "eth_requestAccounts" });
+          provider = new ethers.providers.Web3Provider(window.ethereum);
+          signer = provider.getSigner();
+          contract = new ethers.Contract(contractAddress, contractABI, signer);
+
+          const userAddress = await signer.getAddress();
+          document.getElementById("account").innerText = `Connected: ${userAddress}`;
+          document.getElementById("message").innerText = "✅ Connected successfully!";
+        } catch (error) {
+          console.error(error);
+          document.getElementById("message").innerText = "❌ Connection failed.";
+        }
       } else {
-        alert("Please install MetaMask!");
+        alert("MetaMask not found. Please install it first.");
       }
     }
 
-    async function getCount() {
-      const value = await contract.get();
-      document.getElementById("count").innerText = value.toString();
+    async function readCount() {
+      try {
+        const value = await contract.getCount();
+        document.getElementById("count").innerText = `Current Count: ${value.toString()}`;
+        document.getElementById("message").innerText = "📖 Count read successfully.";
+      } catch (error) {
+        console.error(error);
+        document.getElementById("message").innerText = "❌ Failed to read count.";
+      }
     }
 
-  
     async function increment() {
-      const tx = await contract.increment();
-      await tx.wait();
-      getCount();
+      try {
+        const tx = await contract.increment();
+        document.getElementById("message").innerText = "⏳ Waiting for transaction confirmation...";
+        await tx.wait();
+        readCount();
+        document.getElementById("message").innerText = "✅ Incremented successfully!";
+      } catch (error) {
+        console.error(error);
+        document.getElementById("message").innerText = "❌ Transaction failed.";
+      }
     }
-
-    // Button actions
-    document.getElementById("connectBtn").onclick = connectWallet;
-    document.getElementById("getBtn").onclick = getCount;
-    document.getElementById("incBtn").onclick = increment;
   </script>
 </body>
 </html>
