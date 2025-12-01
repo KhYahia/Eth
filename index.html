@@ -6,7 +6,7 @@
     <title>Yahia's Counter DApp</title>
     <!-- Load Tailwind CSS for modern styling and Ethers.js for Web3 interaction -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FIX: Updated Ethers.js URL to use unpkg instead of jsdellivr to resolve the 'ethers is not defined' error -->
+    <!-- FIX: Using unpkg for Ethers.js to fix 'ethers is not defined' error -->
     <script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     
     <style>
@@ -68,7 +68,7 @@
             <span id="count">0</span>
         </div>
 
-        <div class="flex flex-wrap justify-center space-x-2">
+        <div class="flex flex-wrap justify-center gap-2">
             <button onclick="connectMetaMask()" id="connect-btn" class="btn-primary px-5 py-3 rounded-xl font-semibold hover:bg-emerald-600">
                 Connect MetaMask
             </button>
@@ -78,6 +78,10 @@
             <button onclick="increment()" id="increment-btn" class="btn-primary px-5 py-3 rounded-xl font-semibold opacity-50 cursor-not-allowed" disabled>
                 Increment
             </button>
+            <!-- NEW: Decrement Button -->
+            <button onclick="decrement()" id="decrement-btn" class="btn-primary px-5 py-3 rounded-xl font-semibold opacity-50 cursor-not-allowed bg-red-600 hover:bg-red-700" disabled>
+                Decrement
+            </button>
         </div>
 
         <p id="message" class="mt-4 text-sm font-medium text-gray-300"></p>
@@ -85,13 +89,15 @@
 
     <script>
         // --- 1. CORE CONTRACT AND NETWORK CONFIGURATION ---
-        // Contract Address updated with the new deployment on Sepolia.
+        // Contract Address is verified and correct.
         const CONTRACT_ADDRESS = "0x8BE53DBf7D3cFA0D17A5943934b374f32D4dBe01"; 
         
         const SEPOLIA_CHAIN_ID = 11155111; // Sepolia's Chain ID (in decimal)
         const SEPOLIA_CHAIN_ID_HEX = '0xaa36a7'; // Sepolia's Chain ID (in hex)
         const CONTRACT_ABI = [
             { "inputs": [], "name": "increment", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
+            // NEW: Added Decrement function ABI
+            { "inputs": [], "name": "decrement", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
             { "inputs": [], "name": "count", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
             { "inputs": [], "name": "getCount", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }
         ];
@@ -118,6 +124,11 @@
             document.getElementById("increment-btn").disabled = !enabled;
             document.getElementById("increment-btn").style.opacity = opacity;
             document.getElementById("increment-btn").style.cursor = cursor;
+            
+            // Enable/disable NEW Decrement button
+            document.getElementById("decrement-btn").disabled = !enabled;
+            document.getElementById("decrement-btn").style.opacity = opacity;
+            document.getElementById("decrement-btn").style.cursor = cursor;
         }
 
         // Custom Modal functions (replaces deprecated alert())
@@ -212,52 +223,93 @@
 
         // Read function
         async function readCount() {
-            if (!contract) {
-                updateStatus("Please connect MetaMask first.", true);
+            if (!provider || !CONTRACT_ADDRESS || !CONTRACT_ABI) {
+                updateStatus("System Error: Provider or Contract data missing.", true);
                 return;
             }
             try {
-                // Use a read-only contract instance if the signer is not needed for read functions
                 const readContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
                 const value = await readContract.getCount(); 
                 document.getElementById("count").innerText = value.toString();
-                updateStatus("📖 Count refreshed.", false);
+                
+                // UPDATED: Explicit status message showing the current value
+                updateStatus(`📖 Count refreshed. Current value is ${value.toString()}`, false);
+                
+                return value;
             } catch (error) {
-                console.error("Error reading count:", error);
-                updateStatus("❌ Failed to read count. Ensure MetaMask is on Sepolia and connected.", true);
+                console.error("Ethers Contract Read Error:", error);
+                
+                let userMessage = "❌ Failed to read count. ";
+                if (error.code === 'CALL_EXCEPTION' || error.reason) {
+                    userMessage += "The contract call failed (check Etherscan for the transaction revert reason).";
+                } else if (error.code === 'NETWORK_ERROR') {
+                    userMessage += "Network error. Check your Sepolia connection in MetaMask.";
+                } else {
+                    userMessage += "Unknown error. Check the browser console for details.";
+                }
+
+                updateStatus(userMessage, true);
+                return null;
             }
         }
 
-        // Write function
+        // Write function: Increment
         async function increment() {
             if (!contract) {
                 updateStatus("Please connect MetaMask first.", true);
                 return;
             }
             try {
-                // Disable button during transaction
                 document.getElementById("increment-btn").disabled = true;
 
-                // Call the increment function (requires the signer instance of the contract)
+                // Call the increment function
                 const tx = await contract.increment();
-                updateStatus("⏳ Waiting for transaction confirmation...", false);
+                updateStatus("⏳ Waiting for Increment transaction confirmation...", false);
 
-                // Wait for the transaction to be mined
                 await tx.wait(); 
                 
-                // Refresh the count after mining
                 readCount();
-                updateStatus("✅ Transaction confirmed! Count incremented.", false);
+                updateStatus("✅ Increment transaction confirmed! Count updated.", false);
 
             } catch (error) {
-                console.error("Transaction failed:", error);
+                console.error("Increment Transaction failed:", error);
                 const errorMessage = error.code === 4001 
                     ? "Transaction rejected by user." 
-                    : "Transaction failed. Check gas and console for details.";
+                    : "Increment transaction failed. Check console for details.";
                 updateStatus(`❌ ${errorMessage}`, true);
             } finally {
-                // Re-enable button
                 document.getElementById("increment-btn").disabled = false;
+            }
+        }
+
+        // NEW Write function: Decrement
+        async function decrement() {
+            if (!contract) {
+                updateStatus("Please connect MetaMask first.", true);
+                return;
+            }
+            try {
+                document.getElementById("decrement-btn").disabled = true;
+
+                // Call the decrement function
+                const tx = await contract.decrement();
+                updateStatus("⏳ Waiting for Decrement transaction confirmation...", false);
+
+                await tx.wait(); 
+                
+                readCount();
+                updateStatus("✅ Decrement transaction confirmed! Count updated.", false);
+
+            } catch (error) {
+                console.error("Decrement Transaction failed:", error);
+                // Note: If the Solidity contract uses a `require` statement to prevent the count from going below zero, 
+                // this error handling will catch the revert.
+                const errorMessage = error.code === 4001 
+                    ? "Transaction rejected by user." 
+                    : "Decrement transaction failed. Check console for details (e.g., if you tried to decrement below zero).";
+                updateStatus(`❌ ${errorMessage}`, true);
+            } finally {
+                document.getElementById("decrement-btn").disabled = false;
             }
         }
 
@@ -266,7 +318,6 @@
         // Attempt to connect silently if MetaMask is already connected on load
         window.onload = () => {
              enableButtons(false);
-             // Check if MetaMask is already connected to an account on this site
              if (window.ethereum && window.ethereum.selectedAddress) {
                 connectMetaMask();
              }
@@ -274,23 +325,19 @@
 
         // Event listeners for account and chain changes
         if (window.ethereum) {
-            // Re-run connection logic if the network changes
             window.ethereum.on('chainChanged', (chainId) => {
-                // We reload to clear and reinitialize the Ethers provider correctly
                 window.location.reload(); 
             });
 
             window.ethereum.on('accountsChanged', (accounts) => {
                 if (accounts.length > 0) {
-                    // Account changed or reconnected
                     connectMetaMask(); 
                 } else {
-                    // Wallet disconnected
                     document.getElementById("account").innerHTML = 'Connected Account: <span class="font-mono text-gray-200">Not connected</span>';
                     document.getElementById("count").innerText = '0';
                     updateStatus("Wallet disconnected.", true);
                     enableButtons(false);
-                    document.getElementById("connect-btn").style.display = 'block'; // Show connect button
+                    document.getElementById("connect-btn").style.display = 'block'; 
                     document.getElementById("connect-btn").innerText = 'Connect MetaMask';
                     document.getElementById("connect-btn").disabled = false;
                 }
