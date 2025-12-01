@@ -6,7 +6,8 @@
     <title>Yahia's Counter DApp</title>
     <!-- Load Tailwind CSS for modern styling and Ethers.js for Web3 interaction -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
+    <!-- FIX: Updated Ethers.js URL to use unpkg instead of jsdellivr to resolve the 'ethers is not defined' error -->
+    <script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     
     <style>
         /* Custom styles for the unique look */
@@ -299,16 +300,3 @@
     </script>
 </body>
 </html>
-       
-         
-        
-                
-      
-
-             
-   
-            
-    
-           
-
-
