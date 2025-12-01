@@ -65,23 +65,32 @@
         <p id="account" class="text-gray-400 mb-3 text-sm">
             Connected Account: <span class="font-mono text-gray-200">Not connected</span>
         </p>
-        <div class="text-6xl font-extrabold my-8 text-white bg-gray-800 p-4 rounded-xl shadow-inner">
+
+        <!-- New section for displaying contract state vs. balance state -->
+        <p class="text-xs text-gray-400 mb-1">Contract Counter Value</p>
+        <div class="text-3xl font-extrabold mb-4 text-yellow-300 bg-gray-800 p-2 rounded-lg shadow-inner">
             <span id="count">0</span>
         </div>
 
-        <div class="flex flex-wrap justify-center gap-2">
+        <p class="text-xs text-gray-400 mb-1">Wallet Sepolia ETH Balance</p>
+        <div class="text-4xl font-extrabold my-4 text-white bg-gray-800 p-4 rounded-xl shadow-inner">
+            <span id="balance">0.000</span> ETH
+        </div>
+
+        <div class="flex flex-wrap justify-center gap-2 mt-4">
             <button onclick="connectMetaMask()" id="connect-btn" class="btn-primary px-5 py-3 rounded-xl font-semibold hover:bg-emerald-600">
                 Connect MetaMask
             </button>
-            <button onclick="readCount()" id="read-btn" class="btn-primary px-5 py-3 rounded-xl font-semibold opacity-50 cursor-not-allowed" disabled>
-                Read Count
+            <!-- NEW BUTTON -->
+            <button onclick="readAllData()" id="read-data-btn" class="btn-primary px-5 py-3 rounded-xl font-semibold opacity-50 cursor-not-allowed bg-purple-600 hover:bg-purple-700" disabled>
+                Read All Data
             </button>
+            <!-- END NEW BUTTON -->
             <button onclick="increment()" id="increment-btn" class="btn-primary px-5 py-3 rounded-xl font-semibold opacity-50 cursor-not-allowed" disabled>
-                Increment
+                Increment Counter
             </button>
-            <!-- Decrement Button -->
             <button onclick="decrement()" id="decrement-btn" class="btn-primary px-5 py-3 rounded-xl font-semibold opacity-50 cursor-not-allowed bg-red-600 hover:bg-red-700" disabled>
-                Decrement
+                Decrement Counter
             </button>
         </div>
 
@@ -90,15 +99,10 @@
 
     <script>
         // --- 1. CORE CONTRACT AND NETWORK CONFIGURATION ---
-        // NEW CONTRACT ADDRESS: Deployed from the complete Counter.sol file.
-        // This is the address you provided: 0xf92eCb22742BB1f9465B4d1d591998f70D1E636e
         const CONTRACT_ADDRESS = "0xf92eCb22742BB1f9465B4d1d591998f70D1E636e"; 
+        const SEPOLIA_CHAIN_ID = 11155111; 
+        const SEPOLIA_CHAIN_ID_HEX = '0xaa36a7'; 
         
-        const SEPOLIA_CHAIN_ID = 11155111; // Sepolia's Chain ID (in decimal)
-        const SEPOLIA_CHAIN_ID_HEX = '0xaa36a7'; // Sepolia's Chain ID (in hex)
-        
-        // ABI: Application Binary Interface for interacting with the contract functions.
-        // This includes the necessary 'decrement' function entry.
         const CONTRACT_ABI = [
             { "inputs": [], "name": "decrement", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
             { "inputs": [], "name": "increment", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
@@ -108,34 +112,34 @@
 
         // Global variables for Ethers
         let provider, signer, contract;
+        let userAddress = null; // Store user address globally for read functions
         
         // --- 2. UI UTILITIES ---
 
         function updateStatus(text, isError = false) {
             const messageElement = document.getElementById("message");
-            messageElement.innerText = text;
+            // Use innerHTML to allow the Etherscan link to be clickable
+            messageElement.innerHTML = text;
             messageElement.className = `mt-4 text-sm font-medium ${isError ? 'text-red-400' : 'text-emerald-400'}`;
         }
         
         function enableButtons(enabled) {
             const opacity = enabled ? 1 : 0.5;
             const cursor = enabled ? 'pointer' : 'not-allowed';
-            
-            document.getElementById("read-btn").disabled = !enabled;
-            document.getElementById("read-btn").style.opacity = opacity;
-            document.getElementById("read-btn").style.cursor = cursor;
 
+            document.getElementById("read-data-btn").disabled = !enabled;
+            document.getElementById("read-data-btn").style.opacity = opacity;
+            document.getElementById("read-data-btn").style.cursor = cursor;
+            
             document.getElementById("increment-btn").disabled = !enabled;
             document.getElementById("increment-btn").style.opacity = opacity;
             document.getElementById("increment-btn").style.cursor = cursor;
             
-            // Enable/disable Decrement button
             document.getElementById("decrement-btn").disabled = !enabled;
             document.getElementById("decrement-btn").style.opacity = opacity;
             document.getElementById("decrement-btn").style.cursor = cursor;
         }
 
-        // Custom Modal functions (replaces deprecated alert())
         function showModal(title, body, isError = true) {
             document.getElementById('modal-title').innerText = title;
             document.getElementById('modal-title').className = `text-xl font-bold mb-4 ${isError ? 'text-red-600' : 'text-blue-600'}`;
@@ -155,7 +159,6 @@
             document.getElementById("connect-btn").innerText = 'Connecting...';
             updateStatus("⏳ Requesting connection...", false);
             
-            // Robust check for the ethereum object
             if (typeof window.ethereum === 'undefined' || !window.ethereum) {
                 showModal("MetaMask Required", "MetaMask wallet extension was not found or is not ready. Please ensure it is installed, unlocked, and try refreshing the page.", true);
                 document.getElementById("connect-btn").disabled = false;
@@ -164,25 +167,19 @@
             }
 
             try {
-                // 1. Request account access
                 await window.ethereum.request({ method: "eth_requestAccounts" });
-                
-                // 2. Initialize Ethers objects
                 provider = new ethers.providers.Web3Provider(window.ethereum);
                 
-                // 3. CRITICAL CHECK: Verify the network ID
                 const network = await provider.getNetwork();
                 if (network.chainId !== SEPOLIA_CHAIN_ID) {
                     updateStatus("❌ Incorrect Network! Switching to Sepolia...", true);
                     enableButtons(false);
                     
                     try {
-                        // Attempt to switch the network automatically
                         await window.ethereum.request({
                             method: 'wallet_switchEthereumChain',
                             params: [{ chainId: SEPOLIA_CHAIN_ID_HEX }],
                         });
-                        // If switch is successful, the 'chainChanged' listener will trigger a re-run
                         return; 
                     } catch (switchError) {
                         console.error("Could not switch network automatically:", switchError);
@@ -193,18 +190,17 @@
                     }
                 }
 
-                // 4. If on the correct network, continue setup
                 signer = provider.getSigner();
                 contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
-                const userAddress = await signer.getAddress();
+                userAddress = await signer.getAddress(); // Store address
                 document.getElementById("account").innerHTML = `Connected Account: <span class="font-mono text-emerald-400">${userAddress}</span>`;
                 updateStatus("✅ Connected to Sepolia!", false);
                 
                 enableButtons(true);
-                readCount(); // Read the initial count after connection
+                readAllData(); // Read initial contract count and balance
                 
-                document.getElementById("connect-btn").style.display = 'none'; // Hide connect button on success
+                document.getElementById("connect-btn").style.display = 'none'; 
 
             } catch (error) {
                 console.error("MetaMask connection error:", error);
@@ -225,36 +221,56 @@
             }
         }
 
-        // Read function
-        async function readCount() {
+        // NEW: Function to read all current data states
+        async function readAllData() {
+            if (!provider || !userAddress) {
+                updateStatus("Please connect MetaMask first to read data.", true);
+                return;
+            }
+            updateStatus("⏳ Reading contract count and wallet balance...", false);
+            await readContractCount();
+            await readWalletBalance(userAddress); 
+            updateStatus("📖 Contract Count and Wallet Balance refreshed.", false);
+        }
+        
+        // Function to read the user's ETH balance
+        async function readWalletBalance(address) {
+            if (!provider || !address) {
+                document.getElementById("balance").innerText = 'N/A';
+                return;
+            }
+            try {
+                const balanceWei = await provider.getBalance(address);
+                const balanceEth = ethers.utils.formatEther(balanceWei); 
+                
+                const displayBalance = parseFloat(balanceEth).toFixed(4);
+
+                document.getElementById("balance").innerText = displayBalance;
+            } catch (error) {
+                console.error("Ethers Balance Read Error:", error);
+                document.getElementById("balance").innerText = 'Error';
+            }
+        }
+        
+        // Function to read the contract count
+        async function readContractCount() {
             if (!provider || !CONTRACT_ADDRESS || !CONTRACT_ABI) {
-                updateStatus("System Error: Provider or Contract data missing.", true);
+                // updateStatus("System Error: Provider or Contract data missing.", true); // Suppressing error for better flow with readAllData
                 return;
             }
             try {
                 const readContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
                 const value = await readContract.getCount(); 
                 document.getElementById("count").innerText = value.toString();
-                
-                updateStatus(`📖 Count refreshed. Current value is ${value.toString()}`, false);
-                
                 return value;
             } catch (error) {
                 console.error("Ethers Contract Read Error:", error);
-                
-                let userMessage = "❌ Failed to read count. ";
-                if (error.code === 'CALL_EXCEPTION' || error.reason) {
-                    userMessage += "The contract call failed (check Etherscan for the transaction revert reason).";
-                } else if (error.code === 'NETWORK_ERROR') {
-                    userMessage += "Network error. Check your Sepolia connection in MetaMask.";
-                } else {
-                    userMessage += "Unknown error. Check the browser console for details.";
-                }
-
-                updateStatus(userMessage, true);
+                document.getElementById("count").innerText = 'Error';
+                // updateStatus("❌ Failed to read contract count. Check console.", true); // Suppressing error
                 return null;
             }
         }
+
 
         // Write function: Increment
         async function increment() {
@@ -265,14 +281,21 @@
             try {
                 document.getElementById("increment-btn").disabled = true;
 
-                // Call the increment function
+                // Send the transaction and get the response object
                 const tx = await contract.increment();
-                updateStatus("⏳ Waiting for Increment transaction confirmation...", false);
+                updateStatus(`⏳ Waiting for Increment transaction confirmation... Hash: <span class="font-mono text-yellow-300">${tx.hash.substring(0, 8)}...</span>`, false);
 
-                await tx.wait(); 
+                // Wait for the transaction to be mined and get the receipt
+                const receipt = await tx.wait(); 
                 
-                readCount();
-                updateStatus("✅ Increment transaction confirmed! Count updated.", false);
+                const txLink = `https://sepolia.etherscan.io/tx/${receipt.transactionHash}`;
+                const blockNumber = receipt.blockNumber;
+
+                // Read updated data
+                readAllData(); 
+                
+                // Display confirmation with Etherscan link
+                updateStatus(`✅ Increment confirmed in block <span class="font-bold text-yellow-300">${blockNumber}</span>! View transaction on <a href="${txLink}" target="_blank" class="font-bold underline text-blue-400 hover:text-blue-500">Etherscan</a>.`, false);
 
             } catch (error) {
                 console.error("Increment Transaction failed:", error);
@@ -294,19 +317,25 @@
             try {
                 document.getElementById("decrement-btn").disabled = true;
 
-                // Call the decrement function
+                // Send the transaction and get the response object
                 const tx = await contract.decrement();
-                updateStatus("⏳ Waiting for Decrement transaction confirmation...", false);
+                updateStatus(`⏳ Waiting for Decrement transaction confirmation... Hash: <span class="font-mono text-yellow-300">${tx.hash.substring(0, 8)}...</span>`, false);
 
-                await tx.wait(); 
+                // Wait for the transaction to be mined and get the receipt
+                const receipt = await tx.wait(); 
                 
-                readCount();
-                updateStatus("✅ Decrement transaction confirmed! Count updated.", false);
+                const txLink = `https://sepolia.etherscan.io/tx/${receipt.transactionHash}`;
+                const blockNumber = receipt.blockNumber;
+
+                // Read updated data
+                readAllData();
+                
+                // Display confirmation with Etherscan link
+                updateStatus(`✅ Decrement confirmed in block <span class="font-bold text-yellow-300">${blockNumber}</span>! View transaction on <a href="${txLink}" target="_blank" class="font-bold underline text-blue-400 hover:text-blue-500">Etherscan</a>.`, false);
 
             } catch (error) {
                 console.error("Decrement Transaction failed:", error);
                 
-                // Specific error handling for the 'Count cannot be less than zero' require statement
                 let errorMessage = "Decrement transaction failed. Check console for details.";
                 if (error.reason && error.reason.includes("Count cannot be less than zero")) {
                     errorMessage = "❌ Decrement failed: The count is already zero (or below the safe limit).";
@@ -324,7 +353,6 @@
 
         // --- 4. INITIALIZATION AND EVENT LISTENERS ---
 
-        // Attempt to connect silently if MetaMask is already connected on load
         window.onload = () => {
              enableButtons(false);
              if (window.ethereum && window.ethereum.selectedAddress) {
@@ -332,23 +360,26 @@
              }
         };
 
-        // Event listeners for account and chain changes
         if (window.ethereum) {
             window.ethereum.on('chainChanged', (chainId) => {
                 window.location.reload(); 
             });
 
-            window.ethereum.on('accountsChanged', (accounts) => {
+            window.ethereum.on('accountsChanged', async (accounts) => {
                 if (accounts.length > 0) {
+                    // Re-connect and refresh all data
                     connectMetaMask(); 
                 } else {
+                    // Wallet disconnected UI cleanup
                     document.getElementById("account").innerHTML = 'Connected Account: <span class="font-mono text-gray-200">Not connected</span>';
                     document.getElementById("count").innerText = '0';
+                    document.getElementById("balance").innerText = '0.000';
                     updateStatus("Wallet disconnected.", true);
                     enableButtons(false);
                     document.getElementById("connect-btn").style.display = 'block'; 
                     document.getElementById("connect-btn").innerText = 'Connect MetaMask';
                     document.getElementById("connect-btn").disabled = false;
+                    userAddress = null;
                 }
             });
         }
@@ -356,5 +387,3 @@
     </script>
 </body>
 </html>
-      
-         
