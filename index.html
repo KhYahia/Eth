@@ -6,7 +6,7 @@
     <title>Yahia's Counter DApp</title>
     <!-- Load Tailwind CSS for modern styling and Ethers.js for Web3 interaction -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FIX: Using unpkg for Ethers.js to fix 'ethers is not defined' error -->
+    <!-- Load Ethers.js v5.7.2 for stable Web3 integration -->
     <script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     
     <style>
@@ -14,6 +14,7 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
         body {
             font-family: 'Inter', sans-serif;
+            /* Adaptive dark gradient background */
             background: linear-gradient(135deg, #1f2937, #000000);
             min-height: 100vh;
         }
@@ -78,7 +79,7 @@
             <button onclick="increment()" id="increment-btn" class="btn-primary px-5 py-3 rounded-xl font-semibold opacity-50 cursor-not-allowed" disabled>
                 Increment
             </button>
-            <!-- NEW: Decrement Button -->
+            <!-- Decrement Button -->
             <button onclick="decrement()" id="decrement-btn" class="btn-primary px-5 py-3 rounded-xl font-semibold opacity-50 cursor-not-allowed bg-red-600 hover:bg-red-700" disabled>
                 Decrement
             </button>
@@ -89,15 +90,18 @@
 
     <script>
         // --- 1. CORE CONTRACT AND NETWORK CONFIGURATION ---
-        // Contract Address is verified and correct.
-        const CONTRACT_ADDRESS = "0x8BE53DBf7D3cFA0D17A5943934b374f32D4dBe01"; 
+        // NEW CONTRACT ADDRESS: Deployed from the complete Counter.sol file.
+        // This is the address you provided: 0xf92eCb22742BB1f9465B4d1d591998f70D1E636e
+        const CONTRACT_ADDRESS = "0xf92eCb22742BB1f9465B4d1d591998f70D1E636e"; 
         
         const SEPOLIA_CHAIN_ID = 11155111; // Sepolia's Chain ID (in decimal)
         const SEPOLIA_CHAIN_ID_HEX = '0xaa36a7'; // Sepolia's Chain ID (in hex)
+        
+        // ABI: Application Binary Interface for interacting with the contract functions.
+        // This includes the necessary 'decrement' function entry.
         const CONTRACT_ABI = [
-            { "inputs": [], "name": "increment", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
-            // NEW: Added Decrement function ABI
             { "inputs": [], "name": "decrement", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
+            { "inputs": [], "name": "increment", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
             { "inputs": [], "name": "count", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
             { "inputs": [], "name": "getCount", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }
         ];
@@ -125,7 +129,7 @@
             document.getElementById("increment-btn").style.opacity = opacity;
             document.getElementById("increment-btn").style.cursor = cursor;
             
-            // Enable/disable NEW Decrement button
+            // Enable/disable Decrement button
             document.getElementById("decrement-btn").disabled = !enabled;
             document.getElementById("decrement-btn").style.opacity = opacity;
             document.getElementById("decrement-btn").style.cursor = cursor;
@@ -151,7 +155,7 @@
             document.getElementById("connect-btn").innerText = 'Connecting...';
             updateStatus("⏳ Requesting connection...", false);
             
-            // Robust check for the ethereum object to prevent 'request' undefined error
+            // Robust check for the ethereum object
             if (typeof window.ethereum === 'undefined' || !window.ethereum) {
                 showModal("MetaMask Required", "MetaMask wallet extension was not found or is not ready. Please ensure it is installed, unlocked, and try refreshing the page.", true);
                 document.getElementById("connect-btn").disabled = false;
@@ -232,7 +236,6 @@
                 const value = await readContract.getCount(); 
                 document.getElementById("count").innerText = value.toString();
                 
-                // UPDATED: Explicit status message showing the current value
                 updateStatus(`📖 Count refreshed. Current value is ${value.toString()}`, false);
                 
                 return value;
@@ -282,7 +285,7 @@
             }
         }
 
-        // NEW Write function: Decrement
+        // Write function: Decrement
         async function decrement() {
             if (!contract) {
                 updateStatus("Please connect MetaMask first.", true);
@@ -302,12 +305,18 @@
 
             } catch (error) {
                 console.error("Decrement Transaction failed:", error);
-                // Note: If the Solidity contract uses a `require` statement to prevent the count from going below zero, 
-                // this error handling will catch the revert.
-                const errorMessage = error.code === 4001 
-                    ? "Transaction rejected by user." 
-                    : "Decrement transaction failed. Check console for details (e.g., if you tried to decrement below zero).";
-                updateStatus(`❌ ${errorMessage}`, true);
+                
+                // Specific error handling for the 'Count cannot be less than zero' require statement
+                let errorMessage = "Decrement transaction failed. Check console for details.";
+                if (error.reason && error.reason.includes("Count cannot be less than zero")) {
+                    errorMessage = "❌ Decrement failed: The count is already zero (or below the safe limit).";
+                } else if (error.code === 4001) {
+                    errorMessage = "Transaction rejected by user.";
+                } else {
+                    errorMessage = "❌ Transaction failed. Check console and ensure count > 0.";
+                }
+                
+                updateStatus(errorMessage, true);
             } finally {
                 document.getElementById("decrement-btn").disabled = false;
             }
@@ -347,3 +356,5 @@
     </script>
 </body>
 </html>
+      
+         
