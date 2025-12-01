@@ -10,10 +10,11 @@
     
     <style>
         /* Custom styles for the unique look */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
         body {
             font-family: 'Inter', sans-serif;
             background: linear-gradient(135deg, #1f2937, #000000);
+            min-height: 100vh;
         }
         .card {
             background-color: #2c3e50; /* Dark slate background */
@@ -22,6 +23,7 @@
         .btn-primary {
             background-color: #3498db; /* Blue gradient primary color */
             transition: background-color 0.2s, transform 0.1s;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
         }
         .btn-primary:hover {
             background-color: #2980b9;
@@ -29,6 +31,7 @@
         }
         .btn-primary:active {
             transform: translateY(1px);
+            box-shadow: none;
         }
         #message {
             min-height: 24px; /* Maintain height to prevent layout shift */
@@ -81,41 +84,14 @@
 
     <script>
         // --- 1. CORE CONTRACT AND NETWORK CONFIGURATION ---
-        const CONTRACT_ADDRESS = "0x132d1FbaDB19efE3365b2a1ec69812515bf1De60"; // <-- Updated Address
-        const CONTRACT_ABI = [ // <-- Updated ABI
-            {
-                "inputs": [],
-                "name": "increment",
-                "outputs": [],
-                "stateMutability": "nonpayable",
-                "type": "function"
-            },
-            {
-                "inputs": [],
-                "name": "count",
-                "outputs": [
-                    {
-                        "internalType": "uint256",
-                        "name": "",
-                        "type": "uint256"
-                    }
-                ],
-                "stateMutability": "view",
-                "type": "function"
-            },
-            {
-                "inputs": [],
-                "name": "getCount",
-                "outputs": [
-                    {
-                        "internalType": "uint256",
-                        "name": "",
-                        "type": "uint256"
-                    }
-                ],
-                "stateMutability": "view",
-                "type": "function"
-            }
+        // Contract Address and ABI (Verified by you)
+        const CONTRACT_ADDRESS = "0x132d1FbaDB19efE3365b2a1ec69812515bf1De60"; 
+        const SEPOLIA_CHAIN_ID = 11155111; // Sepolia's Chain ID (in decimal)
+        const SEPOLIA_CHAIN_ID_HEX = '0xaa36a7'; // Sepolia's Chain ID (in hex)
+        const CONTRACT_ABI = [
+            { "inputs": [], "name": "increment", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
+            { "inputs": [], "name": "count", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
+            { "inputs": [], "name": "getCount", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }
         ];
 
         // Global variables for Ethers
@@ -156,22 +132,52 @@
 
         // --- 3. DAPP LOGIC ---
 
-        // Connect function (async is crucial)
+        // Connect function (robustly handles network check)
         async function connectMetaMask() {
-            if (typeof window.ethereum === 'undefined') {
-                showModal("MetaMask Required", "MetaMask wallet extension was not found. Please install it to use this DApp.", true);
+            document.getElementById("connect-btn").disabled = true;
+            document.getElementById("connect-btn").innerText = 'Connecting...';
+            updateStatus("⏳ Requesting connection...", false);
+            
+            // Robust check for the ethereum object to prevent 'request' undefined error
+            if (typeof window.ethereum === 'undefined' || !window.ethereum) {
+                showModal("MetaMask Required", "MetaMask wallet extension was not found or is not ready. Please ensure it is installed, unlocked, and try refreshing the page.", true);
+                document.getElementById("connect-btn").disabled = false;
+                document.getElementById("connect-btn").innerText = 'Connect MetaMask';
                 return;
             }
 
             try {
-                // Request account access (triggers the MetaMask prompt)
+                // 1. Request account access
                 await window.ethereum.request({ method: "eth_requestAccounts" });
                 
-                // Initialize Ethers objects
+                // 2. Initialize Ethers objects
                 provider = new ethers.providers.Web3Provider(window.ethereum);
-                signer = provider.getSigner();
                 
-                // Initialize Contract using the signer
+                // 3. CRITICAL CHECK: Verify the network ID
+                const network = await provider.getNetwork();
+                if (network.chainId !== SEPOLIA_CHAIN_ID) {
+                    updateStatus("❌ Incorrect Network! Switching to Sepolia...", true);
+                    enableButtons(false);
+                    
+                    try {
+                        // Attempt to switch the network automatically
+                        await window.ethereum.request({
+                            method: 'wallet_switchEthereumChain',
+                            params: [{ chainId: SEPOLIA_CHAIN_ID_HEX }],
+                        });
+                        // If switch is successful, the 'chainChanged' listener will trigger a re-run
+                        return; 
+                    } catch (switchError) {
+                        console.error("Could not switch network automatically:", switchError);
+                        updateStatus("❌ Please switch your MetaMask network to Sepolia manually.", true);
+                        document.getElementById("connect-btn").disabled = false;
+                        document.getElementById("connect-btn").innerText = 'Connect MetaMask';
+                        return;
+                    }
+                }
+
+                // 4. If on the correct network, continue setup
+                signer = provider.getSigner();
                 contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
                 const userAddress = await signer.getAddress();
@@ -180,43 +186,57 @@
                 
                 enableButtons(true);
                 readCount(); // Read the initial count after connection
+                
+                document.getElementById("connect-btn").style.display = 'none'; // Hide connect button on success
 
             } catch (error) {
                 console.error("MetaMask connection error:", error);
-                // 4001 error means user rejected the connection
-                const errorMessage = error.code === 4001 
-                    ? "Connection rejected by user." 
-                    : "Connection failed. Ensure MetaMask is on Sepolia Network.";
+                
+                let errorMessage;
+                if (error.code === 4001) {
+                    errorMessage = "Connection rejected by user.";
+                } else if (error.code === -32002) {
+                    errorMessage = "Connection request is already pending. Check MetaMask window.";
+                } else {
+                    errorMessage = "Connection failed. Please check your browser console for details.";
+                }
+                
                 updateStatus(`❌ ${errorMessage}`, true);
                 enableButtons(false);
+                document.getElementById("connect-btn").disabled = false;
+                document.getElementById("connect-btn").innerText = 'Connect MetaMask';
             }
         }
 
-        // Read function (does not require gas/signer, but we use the contract initialized with signer for simplicity)
+        // Read function
         async function readCount() {
             if (!contract) {
                 updateStatus("Please connect MetaMask first.", true);
                 return;
             }
             try {
-                // Use getCount() function from the contract
-                const value = await contract.getCount(); 
+                // Use a read-only contract instance if the signer is not needed for read functions
+                const readContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+                const value = await readContract.getCount(); 
                 document.getElementById("count").innerText = value.toString();
                 updateStatus("📖 Count refreshed.", false);
             } catch (error) {
                 console.error("Error reading count:", error);
-                updateStatus("❌ Failed to read count. Check contract address.", true);
+                updateStatus("❌ Failed to read count. Ensure MetaMask is on Sepolia and connected.", true);
             }
         }
 
-        // Write function (requires gas/signer)
+        // Write function
         async function increment() {
             if (!contract) {
                 updateStatus("Please connect MetaMask first.", true);
                 return;
             }
             try {
-                // Call the increment function
+                // Disable button during transaction
+                document.getElementById("increment-btn").disabled = true;
+
+                // Call the increment function (requires the signer instance of the contract)
                 const tx = await contract.increment();
                 updateStatus("⏳ Waiting for transaction confirmation...", false);
 
@@ -229,50 +249,61 @@
 
             } catch (error) {
                 console.error("Transaction failed:", error);
-                // Handle common user rejection error
                 const errorMessage = error.code === 4001 
                     ? "Transaction rejected by user." 
                     : "Transaction failed. Check gas and console for details.";
                 updateStatus(`❌ ${errorMessage}`, true);
+            } finally {
+                // Re-enable button
+                document.getElementById("increment-btn").disabled = false;
             }
         }
 
-        // --- 4. INITIALIZATION ---
+        // --- 4. INITIALIZATION AND EVENT LISTENERS ---
 
-        // Check the current state and set up initial UI based on connection status on load
+        // Attempt to connect silently if MetaMask is already connected on load
         window.onload = () => {
-             // Initial state: buttons disabled until connection is successful
              enableButtons(false);
-             // Read the count once on load if MetaMask is present and connected
+             // Check if MetaMask is already connected to an account on this site
              if (window.ethereum && window.ethereum.selectedAddress) {
                 connectMetaMask();
              }
         };
 
-        // Optional: Listen for account changes in MetaMask (user switched accounts)
+        // Event listeners for account and chain changes
         if (window.ethereum) {
+            // Re-run connection logic if the network changes
+            window.ethereum.on('chainChanged', (chainId) => {
+                // We reload to clear and reinitialize the Ethers provider correctly
+                window.location.reload(); 
+            });
+
             window.ethereum.on('accountsChanged', (accounts) => {
                 if (accounts.length > 0) {
-                    // Re-run connect logic if account changes
+                    // Account changed or reconnected
                     connectMetaMask(); 
                 } else {
-                    // Disconnected
+                    // Wallet disconnected
                     document.getElementById("account").innerHTML = 'Connected Account: <span class="font-mono text-gray-200">Not connected</span>';
                     document.getElementById("count").innerText = '0';
                     updateStatus("Wallet disconnected.", true);
                     enableButtons(false);
+                    document.getElementById("connect-btn").style.display = 'block'; // Show connect button
+                    document.getElementById("connect-btn").innerText = 'Connect MetaMask';
+                    document.getElementById("connect-btn").disabled = false;
                 }
-            });
-            
-            window.ethereum.on('chainChanged', (chainId) => {
-                // Reload the page if the user switches networks to ensure Ethers is re-initialized correctly
-                window.location.reload(); 
             });
         }
         
     </script>
 </body>
 </html>
+
+     
+              
+            
+   
+            
     
            
 
