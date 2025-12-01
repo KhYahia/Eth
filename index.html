@@ -66,7 +66,7 @@
             Connected Account: <span class="font-mono text-gray-200">Not connected</span>
         </p>
 
-        <!-- New section for displaying contract state vs. balance state -->
+        <!-- Displaying Contract and Balance -->
         <p class="text-xs text-gray-400 mb-1">Contract Counter Value</p>
         <div class="text-3xl font-extrabold mb-4 text-yellow-300 bg-gray-800 p-2 rounded-lg shadow-inner">
             <span id="count">N/A</span>
@@ -77,15 +77,26 @@
             <span id="balance">N/A</span> ETH
         </div>
 
+        <!-- Action Buttons -->
         <div class="flex flex-wrap justify-center gap-2 mt-4">
             <button onclick="connectMetaMask()" id="connect-btn" class="btn-primary px-5 py-3 rounded-xl font-semibold hover:bg-emerald-600">
                 Connect MetaMask
             </button>
-            <!-- NEW BUTTON -->
-            <button onclick="readAllData()" id="read-data-btn" class="btn-primary px-5 py-3 rounded-xl font-semibold opacity-50 cursor-not-allowed bg-purple-600 hover:bg-purple-700" disabled>
-                Read All Data
+            
+            <!-- NEW READ BUTTONS -->
+            <button onclick="readContractCountWrapper()" id="read-count-btn" class="btn-primary px-5 py-3 rounded-xl font-semibold opacity-50 cursor-not-allowed bg-purple-600 hover:bg-purple-700" disabled>
+                Read Counter
             </button>
-            <!-- END NEW BUTTON -->
+            <button onclick="readWalletBalanceWrapper()" id="read-balance-btn" class="btn-primary px-5 py-3 rounded-xl font-semibold opacity-50 cursor-not-allowed bg-indigo-600 hover:bg-indigo-700" disabled>
+                Read Balance
+            </button>
+            
+            <!-- LATEST TRANSACTION BUTTON -->
+            <button onclick="openLatestTx()" id="latest-tx-btn" class="btn-primary px-5 py-3 rounded-xl font-semibold opacity-50 cursor-not-allowed bg-gray-600 hover:bg-gray-700" disabled>
+                Latest Transaction
+            </button>
+            
+            <!-- WRITE BUTTONS -->
             <button onclick="increment()" id="increment-btn" class="btn-primary px-5 py-3 rounded-xl font-semibold opacity-50 cursor-not-allowed" disabled>
                 Increment Counter
             </button>
@@ -113,12 +124,12 @@
         // Global variables for Ethers
         let provider, signer, contract;
         let userAddress = null; // Store user address globally for read functions
+        let latestTxHash = null; // Stores the hash of the last successful transaction
         
         // --- 2. UI UTILITIES ---
 
         function updateStatus(text, isError = false) {
             const messageElement = document.getElementById("message");
-            // Use innerHTML to allow the Etherscan link to be clickable
             messageElement.innerHTML = text;
             messageElement.className = `mt-4 text-sm font-medium ${isError ? 'text-red-400' : 'text-emerald-400'}`;
         }
@@ -127,13 +138,30 @@
             const opacity = enabled ? 1 : 0.5;
             const cursor = enabled ? 'pointer' : 'not-allowed';
 
-            // Only enable Read All Data if connected
-            if (document.getElementById("connect-btn").style.display === 'none' || enabled) {
-                document.getElementById("read-data-btn").disabled = !enabled;
-                document.getElementById("read-data-btn").style.opacity = opacity;
-                document.getElementById("read-data-btn").style.cursor = cursor;
-            }
+            // Read Buttons
+            document.getElementById("read-count-btn").disabled = !enabled;
+            document.getElementById("read-count-btn").style.opacity = opacity;
+            document.getElementById("read-count-btn").style.cursor = cursor;
             
+            document.getElementById("read-balance-btn").disabled = !enabled;
+            document.getElementById("read-balance-btn").style.opacity = opacity;
+            document.getElementById("read-balance-btn").style.cursor = cursor;
+            
+            // Latest Tx Button (only enabled if a hash is stored)
+            const txBtn = document.getElementById("latest-tx-btn");
+            if (!latestTxHash) {
+                txBtn.disabled = true;
+                txBtn.style.opacity = 0.5;
+                txBtn.style.cursor = 'not-allowed';
+                txBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                txBtn.classList.add('bg-gray-600', 'hover:bg-gray-700');
+            } else {
+                txBtn.disabled = !enabled;
+                txBtn.style.opacity = 1;
+                txBtn.style.cursor = 'pointer';
+            }
+
+            // Write Buttons
             document.getElementById("increment-btn").disabled = !enabled;
             document.getElementById("increment-btn").style.opacity = opacity;
             document.getElementById("increment-btn").style.cursor = cursor;
@@ -198,10 +226,10 @@
 
                 userAddress = await signer.getAddress(); // Store address
                 document.getElementById("account").innerHTML = `Connected Account: <span class="font-mono text-emerald-400">${userAddress}</span>`;
-                updateStatus("✅ Connected to Sepolia! Click 'Read All Data' to fetch the counter and your balance.", false);
+                updateStatus("✅ Connected to Sepolia! Click 'Read Counter' and 'Read Balance' to fetch data.", false);
                 
                 enableButtons(true);
-                // REMOVED: readAllData() call to allow the user to control the first data fetch.
+                // No automatic data fetching here
                 
                 document.getElementById("connect-btn").style.display = 'none'; 
 
@@ -223,41 +251,59 @@
                 document.getElementById("connect-btn").innerText = 'Connect MetaMask';
             }
         }
+        
+        // --- Manual Read Wrappers ---
 
-        // UPDATED: Function to read all current data states with improved robustness
-        async function readAllData() {
-            const readButton = document.getElementById("read-data-btn");
-            if (!provider || !userAddress) {
-                updateStatus("Please connect MetaMask first to read data.", true);
+        async function readContractCountWrapper() {
+            const readButton = document.getElementById("read-count-btn");
+            if (!provider) {
+                updateStatus("Please connect MetaMask first to read the counter.", true);
                 return;
             }
 
             try {
-                // Disable button during fetch
                 readButton.disabled = true;
                 readButton.innerText = 'Reading...';
-
-                updateStatus("⏳ Reading contract count and wallet balance...", false);
+                updateStatus("⏳ Reading contract counter value...", false);
                 
-                // Fetch data concurrently
-                await Promise.all([
-                    readContractCount(),
-                    readWalletBalance(userAddress) 
-                ]);
+                await readContractCount(); 
 
-                updateStatus("📖 Contract Count and Wallet Balance refreshed.", false);
-
+                updateStatus("📖 Contract Counter refreshed.", false);
             } catch (error) {
-                console.error("Read All Data failed:", error);
-                updateStatus("❌ Failed to refresh data. Check console for errors.", true);
+                console.error("Read Counter failed:", error);
+                updateStatus("❌ Failed to read counter. Check console for errors.", true);
             } finally {
-                // Re-enable button
                 readButton.disabled = false;
-                readButton.innerText = 'Read All Data';
+                readButton.innerText = 'Read Counter';
             }
         }
         
-        // Function to read the user's ETH balance
+        async function readWalletBalanceWrapper() {
+            const readButton = document.getElementById("read-balance-btn");
+            if (!provider || !userAddress) {
+                updateStatus("Please connect MetaMask first to read the balance.", true);
+                return;
+            }
+
+            try {
+                readButton.disabled = true;
+                readButton.innerText = 'Reading...';
+                updateStatus("⏳ Reading wallet balance...", false);
+                
+                await readWalletBalance(userAddress); 
+
+                updateStatus("💰 Wallet Balance refreshed.", false);
+            } catch (error) {
+                console.error("Read Balance failed:", error);
+                updateStatus("❌ Failed to read balance. Check console for errors.", true);
+            } finally {
+                readButton.disabled = false;
+                readButton.innerText = 'Read Balance';
+            }
+        }
+
+        // --- Core Read Functions ---
+        
         async function readWalletBalance(address) {
             if (!provider || !address) {
                 document.getElementById("balance").innerText = 'N/A';
@@ -276,14 +322,11 @@
             }
         }
         
-        // Function to read the contract count
         async function readContractCount() {
             if (!provider || !CONTRACT_ADDRESS || !CONTRACT_ABI) {
-                // updateStatus("System Error: Provider or Contract data missing.", true); // Suppressing error for better flow with readAllData
                 return;
             }
             try {
-                // Note: Reading the contract uses the provider (read-only), not the signer (for transactions)
                 const readContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
                 const value = await readContract.getCount(); 
                 document.getElementById("count").innerText = value.toString();
@@ -291,13 +334,37 @@
             } catch (error) {
                 console.error("Ethers Contract Read Error:", error);
                 document.getElementById("count").innerText = 'Error';
-                // updateStatus("❌ Failed to read contract count. Check console.", true); // Suppressing error
                 return null;
             }
         }
 
+        // --- Transaction Link Functions ---
 
-        // Write function: Increment
+        function updateLatestTxLink(hash) {
+            latestTxHash = hash;
+            const txBtn = document.getElementById("latest-tx-btn");
+            
+            // Enable and style the button to indicate a link is available
+            txBtn.disabled = false;
+            txBtn.style.opacity = 1;
+            txBtn.style.cursor = 'pointer';
+            txBtn.innerText = 'View Latest Tx';
+            txBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+            txBtn.classList.remove('bg-gray-600', 'hover:bg-gray-700');
+        }
+
+        function openLatestTx() {
+            if (latestTxHash) {
+                const txLink = `https://sepolia.etherscan.io/tx/${latestTxHash}`;
+                window.open(txLink, '_blank');
+            } else {
+                showModal("No Recent Transaction", "No successful transaction has been confirmed yet. Please Increment or Decrement first.", false);
+            }
+        }
+
+
+        // --- Write Functions ---
+
         async function increment() {
             if (!contract) {
                 updateStatus("Please connect MetaMask first.", true);
@@ -306,21 +373,20 @@
             try {
                 document.getElementById("increment-btn").disabled = true;
 
-                // Send the transaction and get the response object
+                // Send the transaction
                 const tx = await contract.increment();
                 updateStatus(`⏳ Waiting for Increment transaction confirmation... Hash: <span class="font-mono text-yellow-300">${tx.hash.substring(0, 8)}...</span>`, false);
 
-                // Wait for the transaction to be mined and get the receipt
+                // Wait for the transaction to be mined
                 const receipt = await tx.wait(); 
                 
-                const txLink = `https://sepolia.etherscan.io/tx/${receipt.transactionHash}`;
                 const blockNumber = receipt.blockNumber;
-
-                // Read updated data
-                readAllData(); 
                 
-                // Display confirmation with Etherscan link
-                updateStatus(`✅ Increment confirmed in block <span class="font-bold text-yellow-300">${blockNumber}</span>! View transaction on <a href="${txLink}" target="_blank" class="font-bold underline text-blue-400 hover:text-blue-500">Etherscan</a>.`, false);
+                // NEW: Update the latest transaction link
+                updateLatestTxLink(receipt.transactionHash);
+
+                // Display confirmation. User must click Read Counter to see the new value.
+                updateStatus(`✅ Increment confirmed in block <span class="font-bold text-yellow-300">${blockNumber}</span>! Click 'View Latest Tx' or 'Read Counter'.`, false);
 
             } catch (error) {
                 console.error("Increment Transaction failed:", error);
@@ -333,7 +399,6 @@
             }
         }
 
-        // Write function: Decrement
         async function decrement() {
             if (!contract) {
                 updateStatus("Please connect MetaMask first.", true);
@@ -342,21 +407,20 @@
             try {
                 document.getElementById("decrement-btn").disabled = true;
 
-                // Send the transaction and get the response object
+                // Send the transaction
                 const tx = await contract.decrement();
                 updateStatus(`⏳ Waiting for Decrement transaction confirmation... Hash: <span class="font-mono text-yellow-300">${tx.hash.substring(0, 8)}...</span>`, false);
 
-                // Wait for the transaction to be mined and get the receipt
+                // Wait for the transaction to be mined
                 const receipt = await tx.wait(); 
                 
-                const txLink = `https://sepolia.etherscan.io/tx/${receipt.transactionHash}`;
                 const blockNumber = receipt.blockNumber;
-
-                // Read updated data
-                readAllData();
                 
-                // Display confirmation with Etherscan link
-                updateStatus(`✅ Decrement confirmed in block <span class="font-bold text-yellow-300">${blockNumber}</span>! View transaction on <a href="${txLink}" target="_blank" class="font-bold underline text-blue-400 hover:text-blue-500">Etherscan</a>.`, false);
+                // NEW: Update the latest transaction link
+                updateLatestTxLink(receipt.transactionHash);
+                
+                // Display confirmation. User must click Read Counter to see the new value.
+                updateStatus(`✅ Decrement confirmed in block <span class="font-bold text-yellow-300">${blockNumber}</span>! Click 'View Latest Tx' or 'Read Counter'.`, false);
 
             } catch (error) {
                 console.error("Decrement Transaction failed:", error);
@@ -396,7 +460,7 @@
 
             window.ethereum.on('accountsChanged', async (accounts) => {
                 if (accounts.length > 0) {
-                    // Re-connect and refresh all data
+                    // Re-connect
                     connectMetaMask(); 
                 } else {
                     // Wallet disconnected UI cleanup
@@ -409,6 +473,7 @@
                     document.getElementById("connect-btn").innerText = 'Connect MetaMask';
                     document.getElementById("connect-btn").disabled = false;
                     userAddress = null;
+                    latestTxHash = null; // Clear the stored hash
                 }
             });
         }
