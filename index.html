@@ -69,12 +69,12 @@
         <!-- New section for displaying contract state vs. balance state -->
         <p class="text-xs text-gray-400 mb-1">Contract Counter Value</p>
         <div class="text-3xl font-extrabold mb-4 text-yellow-300 bg-gray-800 p-2 rounded-lg shadow-inner">
-            <span id="count">0</span>
+            <span id="count">N/A</span>
         </div>
 
         <p class="text-xs text-gray-400 mb-1">Wallet Sepolia ETH Balance</p>
         <div class="text-4xl font-extrabold my-4 text-white bg-gray-800 p-4 rounded-xl shadow-inner">
-            <span id="balance">0.000</span> ETH
+            <span id="balance">N/A</span> ETH
         </div>
 
         <div class="flex flex-wrap justify-center gap-2 mt-4">
@@ -127,9 +127,12 @@
             const opacity = enabled ? 1 : 0.5;
             const cursor = enabled ? 'pointer' : 'not-allowed';
 
-            document.getElementById("read-data-btn").disabled = !enabled;
-            document.getElementById("read-data-btn").style.opacity = opacity;
-            document.getElementById("read-data-btn").style.cursor = cursor;
+            // Only enable Read All Data if connected
+            if (document.getElementById("connect-btn").style.display === 'none' || enabled) {
+                document.getElementById("read-data-btn").disabled = !enabled;
+                document.getElementById("read-data-btn").style.opacity = opacity;
+                document.getElementById("read-data-btn").style.cursor = cursor;
+            }
             
             document.getElementById("increment-btn").disabled = !enabled;
             document.getElementById("increment-btn").style.opacity = opacity;
@@ -195,10 +198,10 @@
 
                 userAddress = await signer.getAddress(); // Store address
                 document.getElementById("account").innerHTML = `Connected Account: <span class="font-mono text-emerald-400">${userAddress}</span>`;
-                updateStatus("✅ Connected to Sepolia!", false);
+                updateStatus("✅ Connected to Sepolia! Click 'Read All Data' to fetch the counter and your balance.", false);
                 
                 enableButtons(true);
-                readAllData(); // Read initial contract count and balance
+                // REMOVED: readAllData() call to allow the user to control the first data fetch.
                 
                 document.getElementById("connect-btn").style.display = 'none'; 
 
@@ -221,16 +224,37 @@
             }
         }
 
-        // NEW: Function to read all current data states
+        // UPDATED: Function to read all current data states with improved robustness
         async function readAllData() {
+            const readButton = document.getElementById("read-data-btn");
             if (!provider || !userAddress) {
                 updateStatus("Please connect MetaMask first to read data.", true);
                 return;
             }
-            updateStatus("⏳ Reading contract count and wallet balance...", false);
-            await readContractCount();
-            await readWalletBalance(userAddress); 
-            updateStatus("📖 Contract Count and Wallet Balance refreshed.", false);
+
+            try {
+                // Disable button during fetch
+                readButton.disabled = true;
+                readButton.innerText = 'Reading...';
+
+                updateStatus("⏳ Reading contract count and wallet balance...", false);
+                
+                // Fetch data concurrently
+                await Promise.all([
+                    readContractCount(),
+                    readWalletBalance(userAddress) 
+                ]);
+
+                updateStatus("📖 Contract Count and Wallet Balance refreshed.", false);
+
+            } catch (error) {
+                console.error("Read All Data failed:", error);
+                updateStatus("❌ Failed to refresh data. Check console for errors.", true);
+            } finally {
+                // Re-enable button
+                readButton.disabled = false;
+                readButton.innerText = 'Read All Data';
+            }
         }
         
         // Function to read the user's ETH balance
@@ -259,6 +283,7 @@
                 return;
             }
             try {
+                // Note: Reading the contract uses the provider (read-only), not the signer (for transactions)
                 const readContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
                 const value = await readContract.getCount(); 
                 document.getElementById("count").innerText = value.toString();
@@ -354,7 +379,11 @@
         // --- 4. INITIALIZATION AND EVENT LISTENERS ---
 
         window.onload = () => {
+             // Reset initial display values to N/A
+             document.getElementById("count").innerText = 'N/A';
+             document.getElementById("balance").innerText = 'N/A';
              enableButtons(false);
+             // Attempt to automatically connect if MetaMask is already connected
              if (window.ethereum && window.ethereum.selectedAddress) {
                 connectMetaMask();
              }
@@ -372,8 +401,8 @@
                 } else {
                     // Wallet disconnected UI cleanup
                     document.getElementById("account").innerHTML = 'Connected Account: <span class="font-mono text-gray-200">Not connected</span>';
-                    document.getElementById("count").innerText = '0';
-                    document.getElementById("balance").innerText = '0.000';
+                    document.getElementById("count").innerText = 'N/A';
+                    document.getElementById("balance").innerText = 'N/A';
                     updateStatus("Wallet disconnected.", true);
                     enableButtons(false);
                     document.getElementById("connect-btn").style.display = 'block'; 
