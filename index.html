@@ -1,155 +1,279 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Simple Counter DApp</title>
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #f9fafc;
-      color: #222;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      margin: 0;
-    }
-
-    h1 {
-      color: #1b5cff;
-    }
-
-    button {
-      background-color: #1b5cff;
-      color: white;
-      border: none;
-      padding: 10px 20px;
-      margin: 5px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 16px;
-    }
-
-    button:hover {
-      background-color: #0f3ecf;
-    }
-
-    #message {
-      margin-top: 15px;
-      color: green;
-      font-weight: bold;
-    }
-
-    .container {
-      text-align: center;
-      background: #fff;
-      padding: 30px;
-      border-radius: 12px;
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>Simple Counter DApp</h1>
-    <p id="account">Connected Account: Not connected</p>
-    <p id="count">Current Count: 0</p>
-
-    <button onclick="connectMetaMask()">Connect MetaMask</button>
-    <button onclick="readCount()">Read Count</button>
-    <button onclick="increment()">Increment</button>
-
-    <p id="message"></p>
-  </div>
-
-  <script>
-    const contractAddress = "0x3ac658a8bcd517e65E85d663cE329F07476721f8";
-    const contractABI = [
-      {
-        "inputs": [],
-        "name": "increment",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "count",
-        "outputs": [
-          {
-            "internalType": "uint256",
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "getCount",
-        "outputs": [
-          {
-            "internalType": "uint256",
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      }
-    ];
-
-    let provider, signer, contract;
-
-    async function connectMetaMask() {
-      if (window.ethereum) {
-        try {
-          await ethereum.request({ method: "eth_requestAccounts" });
-          provider = new ethers.providers.Web3Provider(window.ethereum);
-          signer = provider.getSigner();
-          contract = new ethers.Contract(contractAddress, contractABI, signer);
-
-          const userAddress = await signer.getAddress();
-          document.getElementById("account").innerText = `Connected: ${userAddress}`;
-          document.getElementById("message").innerText = "✅ Connected successfully!";
-        } catch (error) {
-          console.error(error);
-          document.getElementById("message").innerText = "❌ Connection failed.";
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yahia's Counter DApp</title>
+    <!-- Load Tailwind CSS for modern styling and Ethers.js for Web3 interaction -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
+    
+    <style>
+        /* Custom styles for the unique look */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #1f2937, #000000);
         }
-      } else {
-        alert("MetaMask not found. Please install it first.");
-      }
-    }
+        .card {
+            background-color: #2c3e50; /* Dark slate background */
+            border: 1px solid #34495e;
+        }
+        .btn-primary {
+            background-color: #3498db; /* Blue gradient primary color */
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        .btn-primary:hover {
+            background-color: #2980b9;
+            transform: translateY(-1px);
+        }
+        .btn-primary:active {
+            transform: translateY(1px);
+        }
+        #message {
+            min-height: 24px; /* Maintain height to prevent layout shift */
+        }
+        /* Custom message box for alert() replacement */
+        .modal {
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
 
-    async function readCount() {
-      try {
-        const value = await contract.getCount();
-        document.getElementById("count").innerText = `Current Count: ${value.toString()}`;
-        document.getElementById("message").innerText = "📖 Count read successfully.";
-      } catch (error) {
-        console.error(error);
-        document.getElementById("message").innerText = "❌ Failed to read count.";
-      }
-    }
+    <!-- Modal for displaying messages (replaces alert()) -->
+    <div id="message-modal" class="modal fixed inset-0 flex items-center justify-center hidden z-50">
+        <div class="bg-white p-6 rounded-xl shadow-2xl text-center max-w-sm w-full">
+            <h3 id="modal-title" class="text-xl font-bold mb-4 text-red-600">Error</h3>
+            <p id="modal-body" class="text-gray-700 mb-6">MetaMask not found. Please install it first.</p>
+            <button onclick="closeModal()" class="btn-primary px-4 py-2 rounded-lg text-white font-semibold">
+                Got It
+            </button>
+        </div>
+    </div>
+    
+    <!-- Main DApp Card -->
+    <div class="card p-8 rounded-2xl shadow-2xl w-full max-w-md text-center text-white">
+        <h1 class="text-3xl font-bold mb-4 text-emerald-400">
+            <span class="text-yellow-400">Yahia's</span> Counter <span class="text-blue-400">DApp</span>
+        </h1>
+        <p id="account" class="text-gray-400 mb-3 text-sm">
+            Connected Account: <span class="font-mono text-gray-200">Not connected</span>
+        </p>
+        <div class="text-6xl font-extrabold my-8 text-white bg-gray-800 p-4 rounded-xl shadow-inner">
+            <span id="count">0</span>
+        </div>
 
-    async function increment() {
-      try {
-        const tx = await contract.increment();
-        document.getElementById("message").innerText = "⏳ Waiting for transaction confirmation...";
-        await tx.wait();
-        readCount();
-        document.getElementById("message").innerText = "✅ Incremented successfully!";
-      } catch (error) {
-        console.error(error);
-        document.getElementById("message").innerText = "❌ Transaction failed.";
-      }
-    }
-  </script>
+        <div class="flex flex-wrap justify-center space-x-2">
+            <button onclick="connectMetaMask()" id="connect-btn" class="btn-primary px-5 py-3 rounded-xl font-semibold hover:bg-emerald-600">
+                Connect MetaMask
+            </button>
+            <button onclick="readCount()" id="read-btn" class="btn-primary px-5 py-3 rounded-xl font-semibold opacity-50 cursor-not-allowed" disabled>
+                Read Count
+            </button>
+            <button onclick="increment()" id="increment-btn" class="btn-primary px-5 py-3 rounded-xl font-semibold opacity-50 cursor-not-allowed" disabled>
+                Increment
+            </button>
+        </div>
+
+        <p id="message" class="mt-4 text-sm font-medium text-gray-300"></p>
+    </div>
+
+    <script>
+        // --- 1. CORE CONTRACT AND NETWORK CONFIGURATION ---
+        const CONTRACT_ADDRESS = "0x132d1FbaDB19efE3365b2a1ec69812515bf1De60"; // <-- Updated Address
+        const CONTRACT_ABI = [ // <-- Updated ABI
+            {
+                "inputs": [],
+                "name": "increment",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "count",
+                "outputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "",
+                        "type": "uint256"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "getCount",
+                "outputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "",
+                        "type": "uint256"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            }
+        ];
+
+        // Global variables for Ethers
+        let provider, signer, contract;
+        
+        // --- 2. UI UTILITIES ---
+
+        function updateStatus(text, isError = false) {
+            const messageElement = document.getElementById("message");
+            messageElement.innerText = text;
+            messageElement.className = `mt-4 text-sm font-medium ${isError ? 'text-red-400' : 'text-emerald-400'}`;
+        }
+        
+        function enableButtons(enabled) {
+            const opacity = enabled ? 1 : 0.5;
+            const cursor = enabled ? 'pointer' : 'not-allowed';
+            
+            document.getElementById("read-btn").disabled = !enabled;
+            document.getElementById("read-btn").style.opacity = opacity;
+            document.getElementById("read-btn").style.cursor = cursor;
+
+            document.getElementById("increment-btn").disabled = !enabled;
+            document.getElementById("increment-btn").style.opacity = opacity;
+            document.getElementById("increment-btn").style.cursor = cursor;
+        }
+
+        // Custom Modal functions (replaces deprecated alert())
+        function showModal(title, body, isError = true) {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-title').className = `text-xl font-bold mb-4 ${isError ? 'text-red-600' : 'text-blue-600'}`;
+            document.getElementById('modal-body').innerText = body;
+            document.getElementById('message-modal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('message-modal').classList.add('hidden');
+        }
+
+        // --- 3. DAPP LOGIC ---
+
+        // Connect function (async is crucial)
+        async function connectMetaMask() {
+            if (typeof window.ethereum === 'undefined') {
+                showModal("MetaMask Required", "MetaMask wallet extension was not found. Please install it to use this DApp.", true);
+                return;
+            }
+
+            try {
+                // Request account access (triggers the MetaMask prompt)
+                await window.ethereum.request({ method: "eth_requestAccounts" });
+                
+                // Initialize Ethers objects
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                signer = provider.getSigner();
+                
+                // Initialize Contract using the signer
+                contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
+                const userAddress = await signer.getAddress();
+                document.getElementById("account").innerHTML = `Connected Account: <span class="font-mono text-emerald-400">${userAddress}</span>`;
+                updateStatus("✅ Connected to Sepolia!", false);
+                
+                enableButtons(true);
+                readCount(); // Read the initial count after connection
+
+            } catch (error) {
+                console.error("MetaMask connection error:", error);
+                // 4001 error means user rejected the connection
+                const errorMessage = error.code === 4001 
+                    ? "Connection rejected by user." 
+                    : "Connection failed. Ensure MetaMask is on Sepolia Network.";
+                updateStatus(`❌ ${errorMessage}`, true);
+                enableButtons(false);
+            }
+        }
+
+        // Read function (does not require gas/signer, but we use the contract initialized with signer for simplicity)
+        async function readCount() {
+            if (!contract) {
+                updateStatus("Please connect MetaMask first.", true);
+                return;
+            }
+            try {
+                // Use getCount() function from the contract
+                const value = await contract.getCount(); 
+                document.getElementById("count").innerText = value.toString();
+                updateStatus("📖 Count refreshed.", false);
+            } catch (error) {
+                console.error("Error reading count:", error);
+                updateStatus("❌ Failed to read count. Check contract address.", true);
+            }
+        }
+
+        // Write function (requires gas/signer)
+        async function increment() {
+            if (!contract) {
+                updateStatus("Please connect MetaMask first.", true);
+                return;
+            }
+            try {
+                // Call the increment function
+                const tx = await contract.increment();
+                updateStatus("⏳ Waiting for transaction confirmation...", false);
+
+                // Wait for the transaction to be mined
+                await tx.wait(); 
+                
+                // Refresh the count after mining
+                readCount();
+                updateStatus("✅ Transaction confirmed! Count incremented.", false);
+
+            } catch (error) {
+                console.error("Transaction failed:", error);
+                // Handle common user rejection error
+                const errorMessage = error.code === 4001 
+                    ? "Transaction rejected by user." 
+                    : "Transaction failed. Check gas and console for details.";
+                updateStatus(`❌ ${errorMessage}`, true);
+            }
+        }
+
+        // --- 4. INITIALIZATION ---
+
+        // Check the current state and set up initial UI based on connection status on load
+        window.onload = () => {
+             // Initial state: buttons disabled until connection is successful
+             enableButtons(false);
+             // Read the count once on load if MetaMask is present and connected
+             if (window.ethereum && window.ethereum.selectedAddress) {
+                connectMetaMask();
+             }
+        };
+
+        // Optional: Listen for account changes in MetaMask (user switched accounts)
+        if (window.ethereum) {
+            window.ethereum.on('accountsChanged', (accounts) => {
+                if (accounts.length > 0) {
+                    // Re-run connect logic if account changes
+                    connectMetaMask(); 
+                } else {
+                    // Disconnected
+                    document.getElementById("account").innerHTML = 'Connected Account: <span class="font-mono text-gray-200">Not connected</span>';
+                    document.getElementById("count").innerText = '0';
+                    updateStatus("Wallet disconnected.", true);
+                    enableButtons(false);
+                }
+            });
+            
+            window.ethereum.on('chainChanged', (chainId) => {
+                // Reload the page if the user switches networks to ensure Ethers is re-initialized correctly
+                window.location.reload(); 
+            });
+        }
+        
+    </script>
 </body>
 </html>
+    
+           
 
 
